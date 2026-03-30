@@ -49,6 +49,15 @@ app.use('/api/notifications', require('./routes/notifications'));
 // Health check
 app.get('/api/health', (req, res) => res.json({ status: 'ok', timestamp: new Date() }));
 
+app.get('/', (req, res) => {
+  res.json({ status: 'ok', message: 'Placement API is running 🚀' });
+});
+
+app.use(cors({
+  origin: process.env.CLIENT_URL || 'https://college-placement-system.netlify.app',
+  credentials: true
+}));
+
 // Global error handler
 app.use((err, req, res, next) => {
   console.error(err.stack);
