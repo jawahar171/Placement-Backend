@@ -1,0 +1,14 @@
+const router = require('express').Router();
+const ctrl = require('../controllers/studentController');
+const { protect, authorize } = require('../middleware/auth');
+const { uploadResume } = require('../config/cloudinary');
+
+router.get('/dashboard', protect, authorize('student'), ctrl.getDashboard);
+router.get('/profile', protect, authorize('student'), ctrl.getProfile);
+router.patch('/profile', protect, authorize('student'), ctrl.updateProfile);
+router.post('/resume', protect, authorize('student'), uploadResume.single('resume'), ctrl.uploadResume);
+router.patch('/academic-records', protect, authorize('student'), ctrl.updateAcademicRecords);
+router.get('/', protect, authorize('admin', 'company'), ctrl.getAllStudents);
+router.get('/:id', protect, ctrl.getStudentById);
+
+module.exports = router;
