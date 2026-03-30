@@ -46,6 +46,12 @@ app.use('/api/admin', require('./routes/admin'));
 app.use('/api/reports', require('./routes/reports'));
 app.use('/api/notifications', require('./routes/notifications'));
 
+
+// Root route for testing
+app.get("/", (req, res) => {
+  res.send("Backend is running successfully ✅");
+});
+
 // Health check
 app.get('/api/health', (req, res) => res.json({ status: 'ok', timestamp: new Date() }));
 
@@ -57,11 +63,6 @@ app.use(cors({
   origin: process.env.CLIENT_URL || 'https://college-placement-system.netlify.app',
   credentials: true
 }));
-
-// Root route for testing
-app.get("/", (req, res) => {
-  res.send("Backend is running successfully ✅");
-});
 
 // Global error handler
 app.use((err, req, res, next) => {
