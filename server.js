@@ -58,6 +58,11 @@ app.use(cors({
   credentials: true
 }));
 
+// Root route for testing
+app.get("/", (req, res) => {
+  res.send("Backend is running successfully ✅");
+});
+
 // Global error handler
 app.use((err, req, res, next) => {
   console.error(err.stack);
