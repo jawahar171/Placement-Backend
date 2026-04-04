@@ -39,21 +39,23 @@ exports.register = async (req, res) => {
 
 exports.login = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password } = req.body
 
     if (!email || !password)
-      return res.status(400).json({ message: 'Email and password are required' });
+      return res.status(400).json({ message: 'Email and password are required' })
 
-    const user = await User.findOne({ email });
+    // ✅ lowercase trim prevents "User@email.com" vs "user@email.com" mismatch
+    const user = await User.findOne({ email: email.toLowerCase().trim() })
+
     if (!user || !(await user.matchPassword(password))) {
-      return res.status(401).json({ message: 'Invalid email or password' });
+      return res.status(401).json({ message: 'Invalid email or password' })
     }
 
     if (!user.isActive) {
-      return res.status(401).json({ message: 'Account has been deactivated. Contact admin.' });
+      return res.status(401).json({ message: 'Account has been deactivated. Contact admin.' })
     }
 
-    const token = signToken(user._id);
+    const token = signToken(user._id)
 
     res.json({
       token,
@@ -64,13 +66,15 @@ exports.login = async (req, res) => {
         role: user.role,
         avatar: user.avatar,
         studentProfile: user.studentProfile,
-        companyProfile: user.companyProfile
-      }
-    });
+        companyProfile: user.companyProfile,
+      },
+    })
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    // ✅ log full error in dev so you can see what's actually failing
+    console.error('Login error:', err)
+    res.status(500).json({ message: err.message })
   }
-};
+}
 
 exports.getMe = async (req, res) => {
   try {

@@ -60,9 +60,17 @@ app.get('/', (req, res) => {
 });
 
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'https://college-placement-system.netlify.app',
-  credentials: true
-}));
+  origin: [
+    'https://college-placement-system.netlify.app',
+    'http://localhost:5173',   // Vite dev
+    'http://localhost:3000',
+  ],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: false,
+}))
+
+app.options('*', cors())
 
 // Global error handler
 app.use((err, req, res, next) => {

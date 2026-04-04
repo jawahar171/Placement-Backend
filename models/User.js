@@ -10,10 +10,10 @@ const academicRecordSchema = new mongoose.Schema({
 const userSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
   email: { type: String, required: true, unique: true, lowercase: true, trim: true },
-  password: { type: String, required: true, minlength: 6 },
+  password: { type: String, required: true, minlength: 6, select: true },
   role: { type: String, enum: ['student', 'company', 'admin'], default: 'student' },
-  avatar: String,
   isActive: { type: Boolean, default: true },
+  avatar:     { type: String },
 
   // Student-specific
   studentProfile: {
@@ -73,9 +73,10 @@ userSchema.pre('save', async function (next) {
   next();
 });
 
-userSchema.methods.matchPassword = async function (entered) {
-  return await bcrypt.compare(entered, this.password);
-};
+// ✅ Instance method used in authController.login and changePassword
+userSchema.methods.matchPassword = async function (enteredPassword) {
+  return await bcrypt.compare(enteredPassword, this.password)
+}
 
 userSchema.methods.toJSON = function () {
   const obj = this.toObject();
