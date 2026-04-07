@@ -1,6 +1,6 @@
 const router = require('express').Router();
 const ctrl = require('../controllers/interviewController');
-const { protect, authorize } = require('../middleware/auth');
+const { protect, authorize } = require('../middleware/authMiddleware');
 
 router.post('/schedule', protect, authorize('company', 'admin'), ctrl.scheduleInterview);
 router.get('/my', protect, ctrl.getMyInterviews);

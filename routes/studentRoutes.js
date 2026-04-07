@@ -1,6 +1,6 @@
 const router = require('express').Router();
 const ctrl = require('../controllers/studentController');
-const { protect, authorize } = require('../middleware/auth');
+const { protect, authorize } = require('../middleware/authMiddleware');
 const { uploadResume } = require('../config/cloudinary');
 
 router.get('/dashboard', protect, authorize('student'), ctrl.getDashboard);

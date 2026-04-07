@@ -4,7 +4,7 @@
 const express = require('express');
 const driveRouter = express.Router();
 const driveCtrl = require('../controllers/driveController');
-const { protect, authorize } = require('../middleware/auth');
+const { protect, authorize } = require('../middleware/authMiddleware');
 
 driveRouter.post('/', protect, authorize('admin'), driveCtrl.createDrive);
 driveRouter.get('/', protect, driveCtrl.getAllDrives);

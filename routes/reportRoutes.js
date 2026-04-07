@@ -1,5 +1,5 @@
 const router = require('express').Router();
-const { protect, authorize } = require('../middleware/auth');
+const { protect, authorize } = require('../middleware/authMiddleware');
 const { getPlacementStats, getDriveReport, exportCSV } = require('../controllers/reportController');
 
 router.get('/stats', protect, authorize('admin'), getPlacementStats);

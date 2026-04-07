@@ -1,6 +1,6 @@
 const router = require('express').Router();
 const ctrl = require('../controllers/applicationController');
-const { protect, authorize } = require('../middleware/auth');
+const { protect, authorize } = require('../middleware/authMiddleware');
 
 router.post('/job/:jobId', protect, authorize('student'), ctrl.applyForJob);
 router.get('/my', protect, authorize('student'), ctrl.getMyApplications);

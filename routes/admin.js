@@ -1,6 +1,6 @@
 const router = require('express').Router();
 const ctrl = require('../controllers/adminController');
-const { protect, authorize } = require('../middleware/auth');
+const { protect, authorize } = require('../middleware/authMiddleware');
 
 router.get('/dashboard', protect, authorize('admin'), ctrl.getDashboard);
 router.patch('/users/:id/toggle-status', protect, authorize('admin'), ctrl.toggleUserStatus);
