@@ -1,121 +1,111 @@
+require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
-const helmet = require('helmet');
-const morgan = require('morgan');
 const http = require('http');
 const { Server } = require('socket.io');
-require('dotenv').config();
+
+const authRoutes = require('./routes/authRoutes');
+const studentRoutes = require('./routes/studentRoutes');
+const companyRoutes = require('./routes/companyRoutes');
+const applicationRoutes = require('./routes/applicationRoutes');
+const interviewRoutes = require('./routes/interviewRoutes');
+const driveRoutes = require('./routes/driveRoutes');
+const reportRoutes = require('./routes/reportRoutes');
+const notificationRoutes = require('./routes/notificationRoutes');
 
 const app = express();
 const server = http.createServer(app);
 
-const io = new Server(server, {
-  cors: {
-    origin: process.env.CLIENT_URL || 'https://college-placement-system.netlify.app',
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
-    credentials: true
-  }
-});
-
-// Middleware
-app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
-app.use(cors({
-  origin: process.env.CLIENT_URL || 'https://college-placement-system.netlify.app',
-  credentials: true
-}));
-app.use(morgan('dev'));
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-
-// Attach io to every request
-app.use((req, res, next) => {
-  req.io = io;
-  next();
-});
-
-// Routes
-app.use('/api/auth', require('./routes/auth'));
-app.use('/api/students', require('./routes/students'));
-app.use('/api/companies', require('./routes/companies'));
-app.use('/api/jobs', require('./routes/jobs'));
-app.use('/api/applications', require('./routes/applications'));
-app.use('/api/interviews', require('./routes/interviews'));
-app.use('/api/drives', require('./routes/drives'));
-app.use('/api/admin', require('./routes/admin'));
-app.use('/api/reports', require('./routes/reports'));
-app.use('/api/notifications', require('./routes/notifications'));
-
-
-// Root route for testing
-app.get("/", (req, res) => {
-  res.send("Backend is running successfully ✅");
-});
-
-// Health check
-app.get('/api/health', (req, res) => res.json({ status: 'ok', timestamp: new Date() }));
-
-app.get('/', (req, res) => {
-  res.json({ status: 'ok', message: 'Placement API is running 🚀' });
-});
+// ── CORS ── must be before all routes
+const allowedOrigins = [
+  process.env.CLIENT_URL,
+  'https://college-placement-system.netlify.app',
+  'http://localhost:5173',
+  'http://localhost:3000',
+].filter(Boolean);
 
 app.use(cors({
-  origin: [
-    'https://college-placement-system.netlify.app',
-    'http://localhost:5173',   // Vite dev
-    'http://localhost:3000',
-  ],
+  origin: function (origin, callback) {
+    // Allow requests with no origin (mobile apps, curl, Postman)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    return callback(new Error('Not allowed by CORS: ' + origin));
+  },
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: false,
-}))
+  credentials: true,
+}));
 
-app.options('*', cors())
+// Handle preflight for all routes
+app.options('*', cors());
 
-// Global error handler
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(err.status || 500).json({
-    message: err.message || 'Internal server error',
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
-  });
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true }));
+
+// ── Socket.io ──
+const io = new Server(server, {
+  cors: {
+    origin: allowedOrigins,
+    methods: ['GET', 'POST'],
+    credentials: true,
+  },
 });
 
-// Socket.io handlers
-const connectedUsers = new Map();
-
 io.on('connection', (socket) => {
-  console.log('Client connected:', socket.id);
+  console.log('Socket connected:', socket.id);
 
   socket.on('join', (userId) => {
     socket.join(userId);
-    connectedUsers.set(userId, socket.id);
-    console.log(`User ${userId} joined room`);
-  });
-
-  socket.on('leave', (userId) => {
-    socket.leave(userId);
-    connectedUsers.delete(userId);
+    console.log(`User ${userId} joined their room`);
   });
 
   socket.on('disconnect', () => {
-    connectedUsers.forEach((sid, uid) => {
-      if (sid === socket.id) connectedUsers.delete(uid);
-    });
-    console.log('Client disconnected:', socket.id);
+    console.log('Socket disconnected:', socket.id);
   });
 });
 
-// Connect to MongoDB and start server
-mongoose.connect(process.env.MONGO_URI)
+// Make io accessible in controllers
+app.set('io', io);
+
+// ── Health check ──
+app.get('/', (req, res) => {
+  res.json({ message: 'Backend is running successfully ✅' });
+});
+
+// ── Routes ──
+app.use('/api/auth', authRoutes);
+app.use('/api/students', studentRoutes);
+app.use('/api/companies', companyRoutes);
+app.use('/api/applications', applicationRoutes);
+app.use('/api/interviews', interviewRoutes);
+app.use('/api/drives', driveRoutes);
+app.use('/api/reports', reportRoutes);
+app.use('/api/notifications', notificationRoutes);
+
+// ── 404 handler ──
+app.use((req, res) => {
+  res.status(404).json({ message: `Route ${req.method} ${req.originalUrl} not found` });
+});
+
+// ── Global error handler ──
+app.use((err, req, res, next) => {
+  console.error('Global error:', err.message);
+  res.status(err.status || 500).json({
+    message: err.message || 'Internal server error',
+  });
+});
+
+// ── Connect DB and start ──
+const PORT = process.env.PORT || 5000;
+
+mongoose
+  .connect(process.env.MONGO_URI)
   .then(() => {
     console.log('✅ MongoDB connected');
-    const PORT = process.env.PORT || 5000;
     server.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
   })
   .catch((err) => {
-    console.error('❌ MongoDB connection failed:', err.message);
+    console.error('❌ MongoDB error:', err.message);
     process.exit(1);
   });
-
-module.exports = { io };

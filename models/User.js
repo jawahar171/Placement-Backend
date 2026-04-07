@@ -1,48 +1,50 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
-const academicRecordSchema = new mongoose.Schema({
-  semester: Number,
-  gpa: Number,
-  subjects: [{ name: String, grade: String, credits: Number }]
-}, { _id: false });
+const userSchema = new mongoose.Schema(
+  {
+    name: { type: String, required: true, trim: true },
+    email: { type: String, required: true, unique: true, lowercase: true, trim: true },
+    password: { type: String, required: true, minlength: 6, select: false },
+    role: {
+      type: String,
+      enum: ['student', 'company', 'admin'],
+      required: true,
+    },
 
-const userSchema = new mongoose.Schema({
-  name: { type: String, required: true, trim: true },
-  email: { type: String, required: true, unique: true, lowercase: true, trim: true },
-  password: { type: String, required: true, minlength: 6, select: true },
-  role: { type: String, enum: ['student', 'company', 'admin'], default: 'student' },
-  isActive: { type: Boolean, default: true },
-  avatar:     { type: String },
-  username: { type: String, unique: true, sparse: true },
+    // Student fields
+    rollNumber: { type: String, trim: true },
+    department: { type: String, trim: true },
+    batch: { type: String, trim: true },
+    cgpa: { type: Number, default: 0 },
+    skills: [{ type: String }],
+    resumeUrl: { type: String },
+    profilePhoto: { type: String },
+    isPlaced: { type: Boolean, default: false },
+    placedAt: { type: String },
+    ctc: { type: Number },
+    phone: { type: String },
+    address: { type: String },
+    linkedin: { type: String },
+    github: { type: String },
 
-  studentProfile: {
-    rollNumber: String,
-    department: String,
-    batch:      String,
+    // Company fields
+    companyName: { type: String, trim: true },
+    industry: { type: String, trim: true },
+    website: { type: String },
+    description: { type: String },
+    logoUrl: { type: String },
+
+    isActive: { type: Boolean, default: true },
   },
-  companyProfile: {
-    companyName: String,
-    industry:    String,
-  },
+  { timestamps: true }
+);
 
-
-}, { timestamps: true })
+// Hash password before save
 userSchema.pre('save', async function (next) {
   if (!this.isModified('password')) return next();
   this.password = await bcrypt.hash(this.password, 12);
   next();
 });
-
-// ✅ Instance method used in authController.login and changePassword
-userSchema.methods.matchPassword = async function (enteredPassword) {
-  return await bcrypt.compare(enteredPassword, this.password)
-}
-
-userSchema.methods.toJSON = function () {
-  const obj = this.toObject();
-  delete obj.password;
-  return obj;
-};
 
 module.exports = mongoose.model('User', userSchema);
