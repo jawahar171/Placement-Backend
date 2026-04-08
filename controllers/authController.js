@@ -15,8 +15,7 @@ exports.register = async (req, res) => {
     if (!name || !email || !password) {
       return res.status(400).json({ message: 'Name, email and password are required.' });
     }
-
-    if (!['student', 'company', 'admin'].includes(role)) {
+    if (!role || !['student', 'company', 'admin'].includes(role)) {
       return res.status(400).json({ message: 'Role must be student, company, or admin.' });
     }
 
@@ -26,15 +25,8 @@ exports.register = async (req, res) => {
     }
 
     const userData = { name, email, password, role };
-    if (role === 'student') {
-      userData.rollNumber = rollNumber;
-      userData.department = department;
-      userData.batch = batch;
-    }
-    if (role === 'company') {
-      userData.companyName = companyName;
-      userData.industry = industry;
-    }
+    if (role === 'student') Object.assign(userData, { rollNumber, department, batch });
+    if (role === 'company') Object.assign(userData, { companyName, industry });
 
     const user = await User.create(userData);
     const token = signToken(user._id);
@@ -42,12 +34,7 @@ exports.register = async (req, res) => {
     res.status(201).json({
       message: 'Registration successful.',
       token,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-      },
+      user: { id: user._id, name: user.name, email: user.email, role: user.role },
     });
   } catch (err) {
     console.error('Register error:', err);
@@ -75,28 +62,11 @@ exports.login = async (req, res) => {
     }
 
     const token = signToken(user._id);
+    const userData = { id: user._id, name: user.name, email: user.email, role: user.role };
+    if (user.role === 'student') Object.assign(userData, { rollNumber: user.rollNumber, department: user.department, batch: user.batch, cgpa: user.cgpa, isPlaced: user.isPlaced });
+    if (user.role === 'company') Object.assign(userData, { companyName: user.companyName, industry: user.industry });
 
-    res.json({
-      message: 'Login successful.',
-      token,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        ...(user.role === 'student' && {
-          rollNumber: user.rollNumber,
-          department: user.department,
-          batch: user.batch,
-          cgpa: user.cgpa,
-          isPlaced: user.isPlaced,
-        }),
-        ...(user.role === 'company' && {
-          companyName: user.companyName,
-          industry: user.industry,
-        }),
-      },
-    });
+    res.json({ message: 'Login successful.', token, user: userData });
   } catch (err) {
     console.error('Login error:', err);
     res.status(500).json({ message: 'Server error during login.', error: err.message });
