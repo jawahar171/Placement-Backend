@@ -18,8 +18,6 @@ const app = express();
 const server = http.createServer(app);
 
 // ── CORS — must be before all routes ──
-import cors from 'cors';
-
 const allowedOrigins = [
   process.env.CLIENT_URL || 'http://localhost:5173',
   'https://college-placements.netlify.app',
@@ -42,7 +40,7 @@ app.use(express.urlencoded({ extended: true }));
 
 // ── Socket.io ──
 const io = new Server(server, {
-  cors: { origin: '*', methods: ['GET','POST'] },
+  cors: { origin: '*', methods: ['GET', 'POST'] },
 });
 io.on('connection', (socket) => {
   socket.on('join', (userId) => socket.join(userId));
