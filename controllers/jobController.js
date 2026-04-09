@@ -1,7 +1,7 @@
-const Job = require('../models/Job');
+const Job  = require('../models/Job');
 const User = require('../models/User');
-const { createNotification } = require('../utils/notifications');
 
+// ── Create job ─────────────────────────────────────────────────────────────
 exports.createJob = async (req, res) => {
   try {
     const job = await Job.create({ ...req.body, company: req.user._id });
@@ -11,6 +11,7 @@ exports.createJob = async (req, res) => {
   }
 };
 
+// ── Get all jobs ───────────────────────────────────────────────────────────
 exports.getAllJobs = async (req, res) => {
   try {
     const {
@@ -20,20 +21,20 @@ exports.getAllJobs = async (req, res) => {
 
     const query = { status };
 
-    if (type) query.type = type;
+    if (type)       query.type    = type;
     if (minPackage) query.package = { $gte: parseFloat(minPackage) };
     if (search) {
       query.$or = [
-        { title: { $regex: search, $options: 'i' } },
+        { title:       { $regex: search, $options: 'i' } },
         { description: { $regex: search, $options: 'i' } },
-        { skills: { $regex: search, $options: 'i' } }
+        { skills:      { $regex: search, $options: 'i' } },
       ];
     }
     if (department) query['eligibility.allowedDepartments'] = { $in: [department] };
 
     const total = await Job.countDocuments(query);
-    const jobs = await Job.find(query)
-      .populate('company', 'companyProfile.companyName companyProfile.logoUrl companyProfile.industry companyProfile.website')
+    const jobs  = await Job.find(query)
+      .populate('company', 'name companyName logoUrl industry website')
       .sort({ [sortBy]: -1 })
       .skip((page - 1) * limit)
       .limit(parseInt(limit));
@@ -44,10 +45,11 @@ exports.getAllJobs = async (req, res) => {
   }
 };
 
+// ── Get job by ID ──────────────────────────────────────────────────────────
 exports.getJobById = async (req, res) => {
   try {
     const job = await Job.findById(req.params.id)
-      .populate('company', 'companyProfile name email')
+      .populate('company', 'name companyName email logoUrl industry website')
       .populate('placementDrive', 'title startDate endDate');
     if (!job) return res.status(404).json({ message: 'Job not found' });
     res.json(job);
@@ -56,21 +58,21 @@ exports.getJobById = async (req, res) => {
   }
 };
 
+// ── Get company jobs ───────────────────────────────────────────────────────
 exports.getCompanyJobs = async (req, res) => {
   try {
-    const jobs = await Job.find({ company: req.user._id })
-      .sort({ createdAt: -1 });
+    const jobs = await Job.find({ company: req.user._id }).sort({ createdAt: -1 });
     res.json(jobs);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 };
 
+// ── Update job ─────────────────────────────────────────────────────────────
 exports.updateJob = async (req, res) => {
   try {
     const job = await Job.findOne({ _id: req.params.id, company: req.user._id });
     if (!job) return res.status(404).json({ message: 'Job not found or unauthorized' });
-
     Object.assign(job, req.body);
     await job.save();
     res.json(job);
@@ -79,6 +81,7 @@ exports.updateJob = async (req, res) => {
   }
 };
 
+// ── Delete job ─────────────────────────────────────────────────────────────
 exports.deleteJob = async (req, res) => {
   try {
     const job = await Job.findOneAndDelete({ _id: req.params.id, company: req.user._id });
@@ -89,23 +92,33 @@ exports.deleteJob = async (req, res) => {
   }
 };
 
+// ── Check eligibility ──────────────────────────────────────────────────────
 exports.checkEligibility = async (req, res) => {
   try {
     const job = await Job.findById(req.params.id);
+    if (!job) return res.status(404).json({ message: 'Job not found' });
+
+    // Use flat fields directly from User model — no studentProfile nesting
     const student = req.user;
-    const profile = student.studentProfile;
+    const cgpa         = student.cgpa         ?? 0;
+    const backlogs     = student.backlogs      ?? 0;
+    const department   = student.department    ?? '';
+    const batch        = student.batch         ?? '';
 
     const issues = [];
-    if (job.eligibility.minCGPA && profile.cgpa < job.eligibility.minCGPA) {
-      issues.push(`Minimum CGPA required: ${job.eligibility.minCGPA}`);
+
+    if (job.eligibility?.minCGPA && cgpa < job.eligibility.minCGPA) {
+      issues.push(`Minimum CGPA required: ${job.eligibility.minCGPA} (yours: ${cgpa})`);
     }
-    if (job.eligibility.maxBacklogs !== undefined && profile.activeBacklogs > job.eligibility.maxBacklogs) {
-      issues.push(`Maximum backlogs allowed: ${job.eligibility.maxBacklogs}`);
+    if (job.eligibility?.maxBacklogs !== undefined && backlogs > job.eligibility.maxBacklogs) {
+      issues.push(`Maximum backlogs allowed: ${job.eligibility.maxBacklogs} (yours: ${backlogs})`);
     }
-    if (job.eligibility.allowedDepartments?.length && !job.eligibility.allowedDepartments.includes(profile.department)) {
+    if (job.eligibility?.allowedDepartments?.length &&
+        !job.eligibility.allowedDepartments.includes(department)) {
       issues.push(`Open for departments: ${job.eligibility.allowedDepartments.join(', ')}`);
     }
-    if (job.eligibility.allowedBatches?.length && !job.eligibility.allowedBatches.includes(profile.batch)) {
+    if (job.eligibility?.allowedBatches?.length &&
+        !job.eligibility.allowedBatches.includes(batch)) {
       issues.push(`Open for batches: ${job.eligibility.allowedBatches.join(', ')}`);
     }
 
