@@ -3,6 +3,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const http = require('http');
+const jobRoutes = require('./routes/jobRoutes');
 const { Server } = require('socket.io');
 
 const authRoutes = require('./routes/authRoutes');
@@ -60,8 +61,10 @@ app.use('/api/companies', companyRoutes);
 app.use('/api/applications', applicationRoutes);
 app.use('/api/interviews', interviewRoutes);
 app.use('/api/drives', driveRoutes);
+app.use('/api/jobs', jobRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/admin',         adminRoutes);
 
 // ── 404 ──
 app.use((req, res) => {
