@@ -82,6 +82,19 @@ mongoose
   .connect(process.env.MONGO_URI)
   .then(() => {
     console.log('✅ MongoDB connected');
+      // Auto-seed demo users if they don't exist
+  const bcrypt = require('bcryptjs');
+  const User = require('./models/User');
+  const adminExists = await User.findOne({ email: 'admin@demo.com' });
+  if (!adminExists) {
+    const hash = await bcrypt.hash('password123', 10);
+    await User.insertMany([
+      { name:'Admin',   email:'admin@demo.com',   password:hash, role:'admin' },
+      { name:'Student', email:'student@demo.com', password:hash, role:'student', rollNumber:'S001', department:'CS', batch:'2025' },
+      { name:'Company', email:'company@demo.com', password:hash, role:'company', companyName:'Acme', industry:'Tech' }
+    ]);
+    console.log('✅ Demo users seeded');
+  }
     const PORT = process.env.PORT || 5000;
     server.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
   })
