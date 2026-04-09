@@ -80,9 +80,10 @@ app.use((err, req, res, next) => {
 // ── Start ─────────────────────────────────────────────────────────────────
 mongoose
   .connect(process.env.MONGO_URI)
-  .then(() => {
-    console.log('✅ MongoDB connected');
-      // Auto-seed demo users if they don't exist
+  .then(async () => {
+  console.log('✅ MongoDB connected');
+  
+  // Auto-seed demo users if they don't exist
   const bcrypt = require('bcryptjs');
   const User = require('./models/User');
   const adminExists = await User.findOne({ email: 'admin@demo.com' });
@@ -95,9 +96,10 @@ mongoose
     ]);
     console.log('✅ Demo users seeded');
   }
-    const PORT = process.env.PORT || 5000;
-    server.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
-  })
+
+  const PORT = process.env.PORT || 5000;
+  server.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+})
   .catch((err) => {
     console.error('❌ MongoDB error:', err.message);
     process.exit(1);
