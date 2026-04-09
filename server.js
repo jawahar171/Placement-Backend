@@ -1,26 +1,25 @@
 require('dotenv').config();
-const express = require('express');
-const mongoose = require('mongoose');
-const cors = require('cors');
-const http = require('http');
-const jobRoutes = require('./routes/jobRoutes');
+const express    = require('express');
+const mongoose   = require('mongoose');
+const cors       = require('cors');
+const http       = require('http');
 const { Server } = require('socket.io');
 
-const authRoutes = require('./routes/authRoutes');
-const studentRoutes = require('./routes/studentRoutes');
-const companyRoutes = require('./routes/companyRoutes');
-const applicationRoutes = require('./routes/applicationRoutes');
-const interviewRoutes = require('./routes/interviewRoutes');
-const jobRoutes   = require('./routes/jobRoutes');
-const adminRoutes = require('./routes/adminRoutes');
-const driveRoutes = require('./routes/driveRoutes');
-const reportRoutes = require('./routes/reportRoutes');
+const authRoutes         = require('./routes/authRoutes');
+const studentRoutes      = require('./routes/studentRoutes');
+const companyRoutes      = require('./routes/companyRoutes');
+const applicationRoutes  = require('./routes/applicationRoutes');
+const interviewRoutes    = require('./routes/interviewRoutes');
+const jobRoutes          = require('./routes/jobRoutes');
+const adminRoutes        = require('./routes/adminRoutes');
+const driveRoutes        = require('./routes/driveRoutes');
+const reportRoutes       = require('./routes/reportRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 
-const app = express();
+const app    = express();
 const server = http.createServer(app);
 
-// ── CORS — must be before all routes ──
+// ── CORS — must be before all routes ──────────────────────────────────────
 const allowedOrigins = [
   process.env.CLIENT_URL || 'http://localhost:5173',
   'https://college-placements.netlify.app',
@@ -28,7 +27,6 @@ const allowedOrigins = [
 
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (Postman, curl, server-to-server)
     if (!origin) return callback(null, true);
     if (allowedOrigins.includes(origin)) return callback(null, true);
     callback(new Error(`CORS blocked: ${origin}`));
@@ -41,7 +39,7 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// ── Socket.io ──
+// ── Socket.io ─────────────────────────────────────────────────────────────
 const io = new Server(server, {
   cors: { origin: '*', methods: ['GET', 'POST'] },
 });
@@ -51,37 +49,35 @@ io.on('connection', (socket) => {
 });
 app.set('io', io);
 
-// ── Health check ──
+// ── Health check ──────────────────────────────────────────────────────────
 app.get('/', (req, res) => {
   res.json({ message: 'Backend is running successfully ✅' });
 });
 
-// ── Routes ──
-app.use('/api/auth', authRoutes);
-app.use('/api/students', studentRoutes);
-app.use('/api/companies', companyRoutes);
-app.use('/api/applications', applicationRoutes);
-app.use('/api/interviews', interviewRoutes);
-app.use('/api/jobs',   jobRoutes);
-app.use('/api/admin',  adminRoutes);
-app.use('/api/drives', driveRoutes);
-app.use('/api/jobs', jobRoutes);
-app.use('/api/reports', reportRoutes);
+// ── Routes ────────────────────────────────────────────────────────────────
+app.use('/api/auth',          authRoutes);
+app.use('/api/students',      studentRoutes);
+app.use('/api/companies',     companyRoutes);
+app.use('/api/applications',  applicationRoutes);
+app.use('/api/interviews',    interviewRoutes);
+app.use('/api/jobs',          jobRoutes);
+app.use('/api/drives',        driveRoutes);
+app.use('/api/reports',       reportRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/admin',         adminRoutes);
 
-// ── 404 ──
+// ── 404 ───────────────────────────────────────────────────────────────────
 app.use((req, res) => {
   res.status(404).json({ message: `Route ${req.method} ${req.originalUrl} not found` });
 });
 
-// ── Global error handler ──
+// ── Global error handler ──────────────────────────────────────────────────
 app.use((err, req, res, next) => {
   console.error('Error:', err.message);
   res.status(err.status || 500).json({ message: err.message || 'Internal server error' });
 });
 
-// ── Start ──
+// ── Start ─────────────────────────────────────────────────────────────────
 mongoose
   .connect(process.env.MONGO_URI)
   .then(() => {
