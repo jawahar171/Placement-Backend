@@ -18,8 +18,24 @@ const app = express();
 const server = http.createServer(app);
 
 // ── CORS — must be before all routes ──
-app.use(cors({ origin: '*', methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'], allowedHeaders: ['Content-Type','Authorization'], credentials: false }));
-app.options('*', cors());
+import cors from 'cors';
+
+const allowedOrigins = [
+  process.env.CLIENT_URL || 'http://localhost:5173',
+  'https://college-placements.netlify.app',
+];
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow requests with no origin (Postman, curl, server-to-server)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    callback(new Error(`CORS blocked: ${origin}`));
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+}));
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
