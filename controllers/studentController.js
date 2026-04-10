@@ -170,9 +170,18 @@ exports.getDashboard = async (req, res) => {
 // ── Get all students (admin / company) ────────────────────────────────────
 exports.getAllStudents = async (req, res) => {
   try {
-    const { department, batch, cgpa, isPlaced, search, page = 1, limit = 20 } = req.query;
+    const { department, batch, cgpa, isPlaced, search, page = 1, limit = 20, status } = req.query;
 
-    const query = { role: 'student', isActive: true };
+    const query = { role: 'student' };
+
+    // Admins can filter by active/inactive; default for non-admins is active only
+    if (req.user.role === 'admin') {
+      if (status === 'inactive') query.isActive = false;
+      else if (status === 'active') query.isActive = true;
+      // if status not provided, admin sees ALL students (active + inactive)
+    } else {
+      query.isActive = true;
+    }
 
     if (department) query.department           = department;
     if (batch)      query.batch                = batch;

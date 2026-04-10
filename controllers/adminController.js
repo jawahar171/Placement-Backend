@@ -69,12 +69,17 @@ exports.toggleUserStatus = async (req, res) => {
 // ── Update student placement status ───────────────────────────────────────
 exports.updateStudentPlacementStatus = async (req, res) => {
   try {
-    const { isPlaced, ctc, placedAt } = req.body;
+    // Frontend sends: { placementStatus, offeredCompany, offeredRole, offeredPackage }
+    const { placementStatus, offeredCompany, offeredRole, offeredPackage } = req.body;
 
     const update = {};
-    if (isPlaced  !== undefined) update.isPlaced  = isPlaced;
-    if (ctc       !== undefined) update.ctc        = ctc;
-    if (placedAt  !== undefined) update.placedAt   = placedAt;
+    if (placementStatus !== undefined) {
+      update.isPlaced = placementStatus === 'placed';
+      update.placementStatus = placementStatus;
+    }
+    if (offeredCompany !== undefined) update.offeredCompany = offeredCompany;
+    if (offeredRole    !== undefined) update.offeredRole    = offeredRole;
+    if (offeredPackage !== undefined) update.ctc            = parseFloat(offeredPackage) || 0;
 
     const student = await User.findByIdAndUpdate(
       req.params.id,
@@ -92,13 +97,19 @@ exports.updateStudentPlacementStatus = async (req, res) => {
 // ── Bulk update student placement status ──────────────────────────────────
 exports.bulkUpdateStatus = async (req, res) => {
   try {
-    const { studentIds, isPlaced } = req.body;
+    // Frontend sends: { studentIds, placementStatus: 'placed' | 'not_placed' | 'opted_out' }
+    const { studentIds, placementStatus } = req.body;
     if (!studentIds?.length)
       return res.status(400).json({ message: 'studentIds array is required' });
+    if (!placementStatus)
+      return res.status(400).json({ message: 'placementStatus is required' });
 
     await User.updateMany(
       { _id: { $in: studentIds } },
-      { isPlaced: isPlaced ?? true }
+      {
+        placementStatus,
+        isPlaced: placementStatus === 'placed',
+      }
     );
 
     res.json({ message: `Updated ${studentIds.length} students` });

@@ -81,13 +81,23 @@ exports.getDashboard = async (req, res) => {
 
 exports.getAllCompanies = async (req, res) => {
   try {
-    const { search, industry, page = 1, limit = 20 } = req.query;
-    const query = { role: 'company', isActive: true };
-    if (industry) query['companyProfile.industry'] = industry;
+    const { search, industry, page = 1, limit = 20, status } = req.query;
+    const query = { role: 'company' };
+
+    // Admins can filter by active/inactive; default for non-admins is active only
+    if (req.user.role === 'admin') {
+      if (status === 'inactive') query.isActive = false;
+      else if (status === 'active') query.isActive = true;
+      // if status not provided, admin sees ALL companies
+    } else {
+      query.isActive = true;
+    }
+
+    if (industry) query.industry = industry;
     if (search) {
       query.$or = [
-        { 'companyProfile.companyName': { $regex: search, $options: 'i' } },
-        { name: { $regex: search, $options: 'i' } }
+        { companyName: { $regex: search, $options: 'i' } },
+        { name:        { $regex: search, $options: 'i' } },
       ];
     }
 
