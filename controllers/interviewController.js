@@ -44,7 +44,7 @@ exports.scheduleInterview = async (req, res) => {
     });
     await application.save();
 
-    const companyName = req.user.companyProfile?.companyName || 'Company';
+    const companyName = req.user.companyName || 'Company';
     const { subject, html } = emailTemplates.interviewScheduled(
       application.student.name,
       application.job.title,
@@ -64,9 +64,9 @@ exports.scheduleInterview = async (req, res) => {
     req.io.to(application.student._id.toString()).emit('interview-scheduled', { interview });
 
     const populated = await Interview.findById(interview._id)
-      .populate('student', 'name email studentProfile')
+      .populate('student', 'name email department cgpa rollNumber skills resumeUrl')
       .populate('job', 'title')
-      .populate('company', 'companyProfile.companyName');
+      .populate('company', 'name companyName');
 
     res.status(201).json(populated);
   } catch (err) {
@@ -81,9 +81,9 @@ exports.getMyInterviews = async (req, res) => {
       : { company: req.user._id };
 
     const interviews = await Interview.find(query)
-      .populate('student', 'name email studentProfile avatar')
+      .populate('student', 'name email avatar department cgpa rollNumber skills resumeUrl')
       .populate('job', 'title type')
-      .populate('company', 'companyProfile.companyName companyProfile.logoUrl')
+      .populate('company', 'name companyName logoUrl')
       .populate('application', 'status')
       .sort({ scheduledAt: 1 });
 
@@ -96,9 +96,9 @@ exports.getMyInterviews = async (req, res) => {
 exports.getInterviewById = async (req, res) => {
   try {
     const interview = await Interview.findById(req.params.id)
-      .populate('student', 'name email studentProfile')
+      .populate('student', 'name email department cgpa rollNumber skills resumeUrl')
       .populate('job', 'title type package')
-      .populate('company', 'companyProfile')
+      .populate('company', 'name companyName logoUrl industry')
       .populate('application');
 
     if (!interview) return res.status(404).json({ message: 'Interview not found' });
@@ -213,7 +213,7 @@ exports.getAllInterviews = async (req, res) => {
     const interviews = await Interview.find(query)
       .populate('student', 'name email')
       .populate('job', 'title')
-      .populate('company', 'companyProfile.companyName')
+      .populate('company', 'name companyName')
       .sort({ scheduledAt: -1 })
       .skip((page - 1) * limit)
       .limit(parseInt(limit));

@@ -20,16 +20,16 @@ exports.updateProfile = async (req, res) => {
 
     const update = {
       name,
-      'companyProfile.companyName': companyName,
-      'companyProfile.industry': industry,
-      'companyProfile.website': website,
-      'companyProfile.description': description,
-      'companyProfile.hrName': hrName,
-      'companyProfile.hrPhone': hrPhone,
-      'companyProfile.address': address,
-      'companyProfile.employeeCount': employeeCount,
-      'companyProfile.foundedYear': foundedYear,
-      'companyProfile.socialLinks': socialLinks
+      'companyName': companyName,
+      'industry': industry,
+      'website': website,
+      'description': description,
+      'hrName': hrName,
+      'hrPhone': hrPhone,
+      'address': address,
+      'employeeCount': employeeCount,
+      'foundedYear': foundedYear,
+      'linkedin': socialLinks?.linkedin, 'twitter': socialLinks?.twitter
     };
     Object.keys(update).forEach(k => update[k] === undefined && delete update[k]);
 
@@ -53,7 +53,7 @@ exports.getDashboard = async (req, res) => {
       Application.countDocuments({ company: companyId, status: 'shortlisted' }),
       Application.countDocuments({ company: companyId, status: { $in: ['offered', 'offer_accepted'] } }),
       Application.find({ company: companyId })
-        .populate('student', 'name email studentProfile avatar')
+        .populate('student', 'name email avatar department cgpa rollNumber')
         .populate('job', 'title')
         .sort({ createdAt: -1 })
         .limit(5)
@@ -64,7 +64,7 @@ exports.getDashboard = async (req, res) => {
       status: 'scheduled',
       scheduledAt: { $gte: new Date() }
     })
-      .populate('student', 'name email studentProfile')
+      .populate('student', 'name email department cgpa rollNumber')
       .populate('job', 'title')
       .sort({ scheduledAt: 1 })
       .limit(5);

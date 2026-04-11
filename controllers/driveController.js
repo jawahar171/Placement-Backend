@@ -9,7 +9,7 @@ exports.createDrive = async (req, res) => {
     // Notify all eligible students
     const query = { role: 'student', isActive: true };
     if (req.body.eligibility?.allowedDepartments?.length) {
-      query['studentProfile.department'] = { $in: req.body.eligibility.allowedDepartments };
+      query['department'] = { $in: req.body.eligibility.allowedDepartments };
     }
     const students = await User.find(query).select('_id');
 
@@ -36,7 +36,7 @@ exports.getAllDrives = async (req, res) => {
 
     const total = await PlacementDrive.countDocuments(query);
     const drives = await PlacementDrive.find(query)
-      .populate('companies', 'companyProfile.companyName companyProfile.logoUrl')
+      .populate('companies', 'name companyName logoUrl')
       .populate('createdBy', 'name')
       .sort({ startDate: -1 })
       .skip((page - 1) * limit)
@@ -51,9 +51,9 @@ exports.getAllDrives = async (req, res) => {
 exports.getDriveById = async (req, res) => {
   try {
     const drive = await PlacementDrive.findById(req.params.id)
-      .populate('companies', 'companyProfile name email')
+      .populate('companies', 'name companyName email logoUrl')
       .populate('jobs')
-      .populate('registeredStudents', 'name email studentProfile');
+      .populate('registeredStudents', 'name email department cgpa rollNumber');
 
     if (!drive) return res.status(404).json({ message: 'Drive not found' });
     res.json(drive);
