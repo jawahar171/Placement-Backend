@@ -253,32 +253,21 @@ exports.getResumeSignedUrl = async (req, res) => {
     // Extract public_id from stored URL if resumePublicId not stored
     let publicId = student.resumePublicId;
     if (!publicId) {
-      const match = student.resumeUrl.match(/\/upload\/(?:[^/]+\/)?(?:v\d+\/)?(.+)\.[^.]+$/);
+      // Extract everything after /upload/ (skip version prefix like v1234/)
+      const match = student.resumeUrl.match(/\/upload\/(?:[^/]+\/)?(?:v\d+\/)?(.+)$/);
       if (!match) return res.status(400).json({ message: 'Cannot parse resume URL' });
-      publicId = match[1];
+      // Remove query string if present
+      publicId = match[1].split('?')[0];
     }
 
-    // Determine format from the URL
-    const format = student.resumeUrl.split('.').pop().split('?')[0] || 'pdf';
-
-    // Generate a signed URL valid for 1 hour — works for both 'raw' and 'auto' resource types
-    // Try 'raw' first (old uploads), fall back to 'auto' (new uploads)
-    let signedUrl;
-    try {
-      signedUrl = cloudinary.url(publicId + '.' + format, {
-        resource_type: 'raw',
-        type:          'upload',
-        sign_url:      true,
-        secure:        true,
-      });
-    } catch (_) {
-      signedUrl = cloudinary.url(publicId + '.' + format, {
-        resource_type: 'auto',
-        type:          'upload',
-        sign_url:      true,
-        secure:        true,
-      });
-    }
+    // Generate a signed URL — the public_id already includes the file extension
+    // so we do NOT append format again (avoids .pdf.pdf double extension bug)
+    const signedUrl = cloudinary.url(publicId, {
+      resource_type: 'raw',
+      type:          'upload',
+      sign_url:      true,
+      secure:        true,
+    });
 
     res.json({ url: signedUrl });
   } catch (err) {
