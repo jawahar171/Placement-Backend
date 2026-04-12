@@ -275,16 +275,17 @@ exports.getResumeSignedUrl = async (req, res) => {
   }
 };
 
-// ── View resume via redirect (GET /students/resume/view?token=...) ─────────
-// Accepts JWT via query param so plain <a href> navigation works.
-// Issues a 302 → signed Cloudinary URL. The browser follows it natively —
-// no popup blocker, no chrome-error frame, no async/await issues.
+// ── View/proxy resume (GET /students/resume/view?token=...[&studentId=]) ──
+// Proxies the PDF bytes through our own server so the browser never touches
+// Cloudinary directly. This eliminates ALL cross-origin / chrome-error issues.
+// Token passed as query param because plain <a href> cannot set Auth headers.
 exports.viewResume = async (req, res) => {
   try {
-    const jwt = require('jsonwebtoken');
+    const jwt      = require('jsonwebtoken');
+    const axios    = require('axios');
     const { cloudinary } = require('../config/cloudinary');
 
-    // Accept token from query param (plain <a href> can't set headers)
+    // 1. Verify token from query param
     const token = req.query.token;
     if (!token) return res.status(401).send('No token provided');
 
@@ -295,18 +296,16 @@ exports.viewResume = async (req, res) => {
       return res.status(401).send('Invalid token');
     }
 
-    // Determine which student's resume to serve
+    // 2. Find student
     const studentId = req.query.studentId || decoded.id;
-    const student = await User.findById(studentId).select('resumeUrl resumePublicId role');
+    const student   = await User.findById(studentId).select('resumeUrl resumePublicId role');
 
-    if (!student || student.role !== 'student') {
+    if (!student || student.role !== 'student')
       return res.status(404).send('Student not found');
-    }
-    if (!student.resumeUrl) {
+    if (!student.resumeUrl)
       return res.status(404).send('No resume uploaded');
-    }
 
-    // Build public_id from stored URL or resumePublicId field
+    // 3. Build public_id
     let publicId = student.resumePublicId;
     if (!publicId) {
       const match = student.resumeUrl.match(/\/upload\/(?:[^/]+\/)?(?:v\d+\/)?(.+)$/);
@@ -314,7 +313,7 @@ exports.viewResume = async (req, res) => {
       publicId = match[1].split('?')[0];
     }
 
-    // Generate signed URL
+    // 4. Generate signed Cloudinary URL (server-side only — never sent to browser)
     const signedUrl = cloudinary.url(publicId, {
       resource_type: 'raw',
       type:          'upload',
@@ -322,9 +321,24 @@ exports.viewResume = async (req, res) => {
       secure:        true,
     });
 
-    // 302 redirect — browser follows this natively, no frame issues
-    return res.redirect(302, signedUrl);
+    // 5. Fetch the file from Cloudinary on the server
+    const cloudinaryRes = await axios.get(signedUrl, {
+      responseType: 'stream',
+      timeout:      15000,
+    });
+
+    // 6. Determine filename for Content-Disposition
+    const ext      = publicId.split('.').pop() || 'pdf';
+    const filename = `resume.${ext}`;
+
+    // 7. Stream bytes to the browser from OUR domain — zero cross-origin
+    res.setHeader('Content-Type',        cloudinaryRes.headers['content-type'] || 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+    res.setHeader('Cache-Control',       'private, max-age=300');
+
+    cloudinaryRes.data.pipe(res);
   } catch (err) {
-    res.status(500).send(err.message);
+    console.error('viewResume error:', err.message);
+    res.status(500).send('Could not load resume: ' + err.message);
   }
 };
