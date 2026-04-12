@@ -67,7 +67,7 @@ exports.uploadResume = async (req, res) => {
     const student = await User.findById(req.user._id);
     if (student.resumePublicId) {
       try {
-        await cloudinary.uploader.destroy(student.resumePublicId, { resource_type: 'raw' });
+        await cloudinary.uploader.destroy(student.resumePublicId, { resource_type: 'auto' });
       } catch (e) {
         console.log('Old resume delete failed (non-critical):', e.message);
       }
@@ -75,7 +75,7 @@ exports.uploadResume = async (req, res) => {
 
     const result = await uploadToCloudinary(req.file.buffer, {
       folder:        'placement/resumes',
-      resource_type: 'raw',
+      resource_type: 'auto',   // 'auto' detects PDF → serves as application/pdf with public URL
       public_id:     `resume_${req.user._id}_${Date.now()}`,
       format:        req.file.originalname.split('.').pop(),
     });
