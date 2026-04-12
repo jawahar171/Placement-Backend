@@ -19,7 +19,15 @@ const notificationRoutes = require('./routes/notificationRoutes');
 const app    = express();
 const server = http.createServer(app);
 
-// ── CORS — must be before all routes ──────────────────────────────────────
+// ── Resume view — registered BEFORE CORS so cross-site navigation works ───
+// This endpoint is a direct browser navigation (not XHR), so CORS doesn't
+// apply. Registering it before the CORS middleware ensures it is never
+// blocked by callback(null, false) for non-whitelisted origins.
+const { viewResume } = require('./controllers/studentController');
+app.get('/api/students/resume/view',     viewResume);
+app.get('/api/students/:id/resume/view', viewResume);
+
+// ── CORS — must be before all other routes ────────────────────────────────
 const allowedOrigins = [
   process.env.CLIENT_URL || 'http://localhost:5173',
   'https://college-placements.netlify.app',

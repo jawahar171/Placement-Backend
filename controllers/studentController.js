@@ -275,20 +275,16 @@ exports.getResumeSignedUrl = async (req, res) => {
   }
 };
 
-// ── View/proxy resume (GET /students/resume/view?token=...[&studentId=]) ──
-// Fetches the stored resumeUrl directly from Cloudinary on the server side
-// and streams the bytes to the browser from our own domain.
-//
-// WHY THIS WORKS:
-// The Cloudinary URL is valid and accessible — it was only blocked in the browser
-// due to Chrome's cross-origin frame security policy. Node.js has no such restriction
-// and can fetch the file freely. The browser then receives the PDF from our domain.
+// ── View resume (GET /students/resume/view?token=...[&studentId=]) ────────
+// Verifies JWT then 302-redirects to the stored Cloudinary URL.
+// Registered BEFORE CORS in server.js so cross-site navigation is never blocked.
+// The Cloudinary URL is publicly accessible — the previous chrome-error was
+// caused by CORS blocking the backend response, not by the Cloudinary URL itself.
 exports.viewResume = async (req, res) => {
   try {
-    const jwt   = require('jsonwebtoken');
-    const axios = require('axios');
+    const jwt = require('jsonwebtoken');
 
-    // 1. Verify JWT from query param (plain <a href> can't send Auth headers)
+    // 1. Verify JWT from query param
     const token = req.query.token;
     if (!token) return res.status(401).send('No token provided');
 
@@ -296,41 +292,22 @@ exports.viewResume = async (req, res) => {
     try {
       decoded = jwt.verify(token, process.env.JWT_SECRET);
     } catch {
-      return res.status(401).send('Invalid token');
+      return res.status(401).send('Invalid or expired token');
     }
 
     // 2. Find student
-    const studentId = req.query.studentId || decoded.id;
-    const student   = await User.findById(studentId).select('resumeUrl role name');
+    const studentId = req.params.id || req.query.studentId || decoded.id;
+    const student   = await User.findById(studentId).select('resumeUrl role');
 
     if (!student || student.role !== 'student')
       return res.status(404).send('Student not found');
     if (!student.resumeUrl)
       return res.status(404).send('No resume uploaded');
 
-    // 3. Fetch the file directly using the stored URL — Node.js is not subject
-    //    to browser cross-origin restrictions, so this works without any signing
-    const fileRes = await axios.get(student.resumeUrl, {
-      responseType: 'stream',
-      timeout:      20000,
-      headers: {
-        // Some CDNs need a browser-like User-Agent to serve content
-        'User-Agent': 'Mozilla/5.0',
-      },
-    });
-
-    // 4. Determine file extension from URL
-    const ext = (student.resumeUrl.split('?')[0].split('.').pop() || 'pdf').toLowerCase();
-    const contentType = ext === 'pdf' ? 'application/pdf'
-                      : ext === 'doc' ? 'application/msword'
-                      : 'application/octet-stream';
-
-    // 5. Stream to browser from our domain — no cross-origin, no frame issues
-    res.setHeader('Content-Type',        fileRes.headers['content-type'] || contentType);
-    res.setHeader('Content-Disposition', `inline; filename="resume.${ext}"`);
-    res.setHeader('Cache-Control',       'private, max-age=300');
-
-    fileRes.data.pipe(res);
+    // 3. Redirect directly to the stored Cloudinary URL.
+    //    This endpoint is registered before CORS so cross-site navigation works.
+    //    The browser follows the 302 and opens the PDF from Cloudinary directly.
+    return res.redirect(302, student.resumeUrl);
   } catch (err) {
     console.error('viewResume error:', err.message);
     res.status(500).send('Could not load resume: ' + err.message);
