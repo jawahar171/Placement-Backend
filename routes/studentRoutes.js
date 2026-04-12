@@ -8,9 +8,11 @@ router.get('/profile', protect, authorize('student'), ctrl.getProfile);
 router.patch('/profile', protect, authorize('student'), ctrl.updateProfile);
 router.post('/resume', protect, authorize('student'), uploadResume.single('resume'), ctrl.uploadResume);
 router.get('/resume/signed-url', protect, authorize('student'), ctrl.getResumeSignedUrl);
+router.get('/resume/view', ctrl.viewResume);
 router.patch('/academic-records', protect, authorize('student'), ctrl.updateAcademicRecords);
 router.get('/', protect, authorize('admin', 'company'), ctrl.getAllStudents);
 router.get('/:id/resume/signed-url', protect, authorize('admin', 'company'), ctrl.getResumeSignedUrl);
+router.get('/:id/resume/view', ctrl.viewResume);
 router.get('/:id', protect, ctrl.getStudentById);
 
 module.exports = router;
