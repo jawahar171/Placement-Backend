@@ -356,3 +356,76 @@ exports.viewResume = async (req, res) => {
     res.status(500).send('Could not load resume: ' + err.message);
   }
 };
+
+// ── Migrate resume from raw → auto type ───────────────────────────────────
+// Re-uploads the stored raw Cloudinary file as resource_type:'auto'
+// so it gets a /image/upload/ URL that browsers can open directly.
+// Called once per student — subsequent uploads already use 'auto' type.
+exports.migrateResume = async (req, res) => {
+  try {
+    const { cloudinary } = require('../config/cloudinary');
+
+    const student = await User.findById(req.user._id).select('resumeUrl resumePublicId');
+    if (!student?.resumeUrl) return res.status(404).json({ message: 'No resume found' });
+
+    // Already migrated (auto type uses /image/upload/ path)
+    if (student.resumeUrl.includes('/image/upload/')) {
+      return res.json({ resumeUrl: student.resumeUrl, migrated: false });
+    }
+
+    // Re-upload from the existing URL with resource_type:'auto'
+    const result = await cloudinary.uploader.upload(student.resumeUrl, {
+      resource_type: 'auto',
+      folder:        'placement/resumes',
+      use_filename:  false,
+      overwrite:     false,
+    });
+
+    // Save the new accessible URL
+    const updated = await User.findByIdAndUpdate(
+      req.user._id,
+      { resumeUrl: result.secure_url, resumePublicId: result.public_id },
+      { new: true }
+    ).select('-password');
+
+    res.json({ resumeUrl: result.secure_url, migrated: true, student: updated });
+  } catch (err) {
+    console.error('migrateResume error:', err.message);
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// ── Migrate any student's resume (admin/company) ──────────────────────────
+exports.migrateStudentResume = async (req, res) => {
+  try {
+    const { cloudinary } = require('../config/cloudinary');
+
+    const student = await User.findById(req.params.id).select('resumeUrl resumePublicId role');
+    if (!student || student.role !== 'student')
+      return res.status(404).json({ message: 'Student not found' });
+    if (!student?.resumeUrl)
+      return res.status(404).json({ message: 'No resume found' });
+
+    if (student.resumeUrl.includes('/image/upload/')) {
+      return res.json({ resumeUrl: student.resumeUrl, migrated: false });
+    }
+
+    const result = await cloudinary.uploader.upload(student.resumeUrl, {
+      resource_type: 'auto',
+      folder:        'placement/resumes',
+      use_filename:  false,
+      overwrite:     false,
+    });
+
+    const updated = await User.findByIdAndUpdate(
+      req.params.id,
+      { resumeUrl: result.secure_url, resumePublicId: result.public_id },
+      { new: true }
+    ).select('-password');
+
+    res.json({ resumeUrl: result.secure_url, migrated: true, student: updated });
+  } catch (err) {
+    console.error('migrateStudentResume error:', err.message);
+    res.status(500).json({ message: err.message });
+  }
+};
