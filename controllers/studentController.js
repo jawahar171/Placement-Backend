@@ -275,80 +275,56 @@ exports.getResumeSignedUrl = async (req, res) => {
   }
 };
 
-// ── View resume (GET /students/resume/view?token=...[&studentId=]) ────────
-// Proxies resume bytes through our server using Cloudinary's private_download_url.
-// This uses api.cloudinary.com (Admin API) which is always accessible from Render
-// and works for raw resources regardless of delivery settings.
-// Registered BEFORE CORS in server.js so cross-site navigation is never blocked.
+// ── View/download resume proxy ─────────────────────────────────────────────
+// Streams resume bytes using Cloudinary Admin API credentials.
+// Works for both raw and image resource types.
+// Registered BEFORE CORS in server.js.
 exports.viewResume = async (req, res) => {
   try {
     const jwt   = require('jsonwebtoken');
     const axios = require('axios');
     const { cloudinary } = require('../config/cloudinary');
 
-    // 1. Verify JWT from query param
+    // 1. Verify JWT
     const token = req.query.token;
     if (!token) return res.status(401).send('No token provided');
-
     let decoded;
-    try {
-      decoded = jwt.verify(token, process.env.JWT_SECRET);
-    } catch {
-      return res.status(401).send('Invalid or expired token');
-    }
+    try { decoded = jwt.verify(token, process.env.JWT_SECRET); }
+    catch { return res.status(401).send('Invalid or expired token'); }
 
     // 2. Find student
     const studentId = req.params.id || req.query.studentId || decoded.id;
     const student   = await User.findById(studentId).select('resumeUrl resumePublicId role');
+    if (!student || student.role !== 'student') return res.status(404).send('Student not found');
+    if (!student.resumeUrl) return res.status(404).send('No resume uploaded');
 
-    if (!student || student.role !== 'student')
-      return res.status(404).send('Student not found');
-    if (!student.resumeUrl)
-      return res.status(404).send('No resume uploaded');
+    // 3. Determine resource_type from stored URL path
+    const resourceType = student.resumeUrl.includes('/image/upload/') ? 'image' : 'raw';
 
-    // 3. Get the base publicId WITHOUT extension
-    //    At upload time: public_id = `resume_${userId}_${timestamp}` (no ext)
-    //                    format    = 'pdf' (passed separately)
-    //    So resumePublicId in DB = "placement/resumes/resume_userId_timestamp" (no .pdf)
-    let basePublicId = student.resumePublicId;
-    if (!basePublicId) {
-      // Fallback: extract from URL and strip extension
-      const match = student.resumeUrl.match(/\/upload\/(?:[^/]+\/)?(?:v\d+\/)?(.+)$/);
-      if (!match) return res.status(400).send('Cannot parse resume URL');
-      basePublicId = match[1].split('?')[0].replace(/\.[^.]+$/, ''); // strip .pdf
-    } else {
-      // resumePublicId may include folder prefix from Cloudinary
-      // e.g. "placement/resumes/resume_id_timestamp" — already correct, no extension
-      basePublicId = basePublicId.replace(/\.[^.]+$/, ''); // safety strip
-    }
+    // 4. Build base publicId (strip extension) and format
+    let basePublicId = student.resumePublicId
+      ? student.resumePublicId.replace(/\.[^.]+$/, '')
+      : (() => {
+          const m = student.resumeUrl.match(/\/upload\/(?:[^/]+\/)?(?:v\d+\/)?(.+)$/);
+          return m ? m[1].split('?')[0].replace(/\.[^.]+$/, '') : null;
+        })();
 
-    // Determine format from the stored URL
+    if (!basePublicId) return res.status(400).send('Cannot parse resume URL');
     const fmt = (student.resumeUrl.split('?')[0].split('.').pop() || 'pdf').toLowerCase();
 
-    // 4. Generate authenticated download URL via Cloudinary Admin API
-    //    private_download_url hits api.cloudinary.com (not res.cloudinary.com)
-    //    and is always accessible from server-side with valid credentials
+    // 5. Generate authenticated download URL using Cloudinary Admin API credentials
     const downloadUrl = cloudinary.utils.private_download_url(basePublicId, fmt, {
-      resource_type: 'raw',
-      expires_at: Math.floor(Date.now() / 1000) + 3600,
+      resource_type: resourceType,
+      expires_at:    Math.floor(Date.now() / 1000) + 3600,
     });
 
-    // 5. Fetch from Cloudinary Admin API — server-side, no browser restrictions
-    const fileRes = await axios.get(downloadUrl, {
-      responseType: 'stream',
-      timeout: 20000,
-    });
+    // 6. Fetch from Cloudinary server-side (Admin API — authenticated, not public CDN)
+    const fileRes = await axios.get(downloadUrl, { responseType: 'stream', timeout: 20000 });
 
-    // 6. Stream bytes to browser from OUR domain — zero cross-origin issues
-    const contentType = fmt === 'pdf'  ? 'application/pdf'
-                      : fmt === 'docx' ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-                      : fmt === 'doc'  ? 'application/msword'
-                      : 'application/octet-stream';
-
-    res.setHeader('Content-Type',        fileRes.headers['content-type'] || contentType);
-    res.setHeader('Content-Disposition', `inline; filename="resume.${fmt}"`);
-    res.setHeader('Cache-Control',       'private, max-age=300');
-
+    // 7. Stream to browser — from our domain, no CORS, no 401
+    res.setHeader('Content-Disposition', `attachment; filename="resume.${fmt}"`);
+    res.setHeader('Content-Type', fileRes.headers['content-type'] || 'application/pdf');
+    res.setHeader('Cache-Control', 'private, max-age=300');
     fileRes.data.pipe(res);
 
   } catch (err) {
