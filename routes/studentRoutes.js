@@ -14,6 +14,7 @@ router.patch('/academic-records', protect, authorize('student'), ctrl.updateAcad
 router.get('/', protect, authorize('admin', 'company'), ctrl.getAllStudents);
 router.get('/:id/resume/signed-url', protect, authorize('admin', 'company'), ctrl.getResumeSignedUrl);
 router.post('/:id/resume/migrate', protect, authorize('admin', 'company'), ctrl.migrateStudentResume);
+router.post('/:id/resume/upload-migrate', protect, authorize('admin', 'company'), uploadResume.single('resume'), ctrl.uploadMigrateResume);
 router.get('/:id/resume/view', ctrl.viewResume);
 router.get('/:id', protect, ctrl.getStudentById);
 

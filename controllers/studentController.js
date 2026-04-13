@@ -429,3 +429,41 @@ exports.migrateStudentResume = async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 };
+
+// ── Upload-migrate: re-upload a student's resume (admin/company) ──────────
+// Receives the resume file and saves it as resource_type:'auto' for the student.
+// Used when admin/company views an old raw-type resume that can't be opened.
+exports.uploadMigrateResume = async (req, res) => {
+  try {
+    const { cloudinary, uploadToCloudinary } = require('../config/cloudinary');
+
+    const student = await User.findById(req.params.id).select('resumeUrl resumePublicId role');
+    if (!student || student.role !== 'student')
+      return res.status(404).json({ message: 'Student not found' });
+    if (!req.file) return res.status(400).json({ message: 'No file received' });
+
+    // Delete old raw resume
+    if (student.resumePublicId) {
+      try {
+        await cloudinary.uploader.destroy(student.resumePublicId, { resource_type: 'raw' });
+      } catch (_) {}
+    }
+
+    const result = await uploadToCloudinary(req.file.buffer, {
+      folder:        'placement/resumes',
+      resource_type: 'auto',
+      public_id:     `resume_${req.params.id}_${Date.now()}`,
+    });
+
+    const updated = await User.findByIdAndUpdate(
+      req.params.id,
+      { resumeUrl: result.secure_url, resumePublicId: result.public_id },
+      { new: true }
+    ).select('-password');
+
+    res.json({ resumeUrl: result.secure_url, student: updated });
+  } catch (err) {
+    console.error('uploadMigrateResume error:', err.message);
+    res.status(500).json({ message: err.message });
+  }
+};
