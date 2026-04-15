@@ -285,8 +285,11 @@ exports.viewResume = async (req, res) => {
     const axios = require('axios');
     const { cloudinary } = require('../config/cloudinary');
 
-    // 1. Verify JWT
-    const token = req.query.token;
+    // 1. Verify JWT — accept from Authorization header (axios) or query param (fallback)
+    let token = req.query.token;
+    if (!token && req.headers.authorization?.startsWith('Bearer ')) {
+      token = req.headers.authorization.split(' ')[1];
+    }
     if (!token) return res.status(401).send('No token provided');
     let decoded;
     try { decoded = jwt.verify(token, process.env.JWT_SECRET); }
