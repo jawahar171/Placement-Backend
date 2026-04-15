@@ -75,9 +75,11 @@ exports.uploadResume = async (req, res) => {
 
     const result = await uploadToCloudinary(req.file.buffer, {
       folder:        'placement/resumes',
-      resource_type: 'auto',   // 'auto' detects PDF → serves as application/pdf with public URL
+      resource_type: 'auto',
       public_id:     `resume_${req.user._id}_${Date.now()}`,
       format:        req.file.originalname.split('.').pop(),
+      access_mode:   'public',   // explicitly set public so URL is always accessible
+      type:          'upload',
     });
 
     const updated = await User.findByIdAndUpdate(
@@ -276,16 +278,15 @@ exports.getResumeSignedUrl = async (req, res) => {
 };
 
 // ── View/download resume proxy ─────────────────────────────────────────────
-// Streams resume bytes using Cloudinary Admin API credentials.
-// Works for both raw and image resource types.
-// Registered BEFORE CORS in server.js.
+// Streams resume bytes from Cloudinary through our server.
+// New uploads use access_mode:'public' so they're always accessible.
+// Uses axios to fetch and stream — avoids any browser cross-origin issues.
 exports.viewResume = async (req, res) => {
   try {
     const jwt   = require('jsonwebtoken');
     const axios = require('axios');
-    const { cloudinary } = require('../config/cloudinary');
 
-    // 1. Verify JWT — accept from Authorization header (axios) or query param (fallback)
+    // 1. Verify JWT — accept from Authorization header or query param
     let token = req.query.token;
     if (!token && req.headers.authorization?.startsWith('Bearer ')) {
       token = req.headers.authorization.split(' ')[1];
@@ -297,34 +298,20 @@ exports.viewResume = async (req, res) => {
 
     // 2. Find student
     const studentId = req.params.id || req.query.studentId || decoded.id;
-    const student   = await User.findById(studentId).select('resumeUrl resumePublicId role');
+    const student   = await User.findById(studentId).select('resumeUrl role');
     if (!student || student.role !== 'student') return res.status(404).send('Student not found');
     if (!student.resumeUrl) return res.status(404).send('No resume uploaded');
 
-    // 3. Determine resource_type from stored URL path
-    const resourceType = student.resumeUrl.includes('/image/upload/') ? 'image' : 'raw';
-
-    // 4. Build base publicId (strip extension) and format
-    let basePublicId = student.resumePublicId
-      ? student.resumePublicId.replace(/\.[^.]+$/, '')
-      : (() => {
-          const m = student.resumeUrl.match(/\/upload\/(?:[^/]+\/)?(?:v\d+\/)?(.+)$/);
-          return m ? m[1].split('?')[0].replace(/\.[^.]+$/, '') : null;
-        })();
-
-    if (!basePublicId) return res.status(400).send('Cannot parse resume URL');
-    const fmt = (student.resumeUrl.split('?')[0].split('.').pop() || 'pdf').toLowerCase();
-
-    // 5. Generate authenticated download URL using Cloudinary Admin API credentials
-    const downloadUrl = cloudinary.utils.private_download_url(basePublicId, fmt, {
-      resource_type: resourceType,
-      expires_at:    Math.floor(Date.now() / 1000) + 3600,
+    // 3. Fetch the resume bytes from Cloudinary using server-side request
+    //    Server-side requests bypass browser CORS and access control restrictions
+    const fileRes = await axios.get(student.resumeUrl, {
+      responseType: 'stream',
+      timeout:      20000,
+      headers:      { 'User-Agent': 'Mozilla/5.0' },
     });
 
-    // 6. Fetch from Cloudinary server-side (Admin API — authenticated, not public CDN)
-    const fileRes = await axios.get(downloadUrl, { responseType: 'stream', timeout: 20000 });
-
-    // 7. Stream to browser — from our domain, no CORS, no 401
+    // 4. Stream bytes to browser from our domain
+    const fmt = (student.resumeUrl.split('?')[0].split('.').pop() || 'pdf').toLowerCase();
     res.setHeader('Content-Disposition', `attachment; filename="resume.${fmt}"`);
     res.setHeader('Content-Type', fileRes.headers['content-type'] || 'application/pdf');
     res.setHeader('Cache-Control', 'private, max-age=300');
@@ -335,6 +322,7 @@ exports.viewResume = async (req, res) => {
     res.status(500).send('Could not load resume: ' + err.message);
   }
 };
+
 
 // ── Migrate resume from raw → auto type ───────────────────────────────────
 // Re-uploads the stored raw Cloudinary file as resource_type:'auto'
