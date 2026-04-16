@@ -81,21 +81,15 @@ exports.uploadResume = async (req, res) => {
       type:          'upload',
     });
 
-    // Force public access so the URL is directly accessible by browsers
-    try {
-      await cloudinary.api.update(result.public_id, {
-        resource_type: result.resource_type || 'image',
-        access_mode:   'public',
-      });
-    } catch (e) {
-      console.log('access_mode update non-critical:', e.message);
-    }
-
+    // Store file buffer directly in MongoDB for reliable serving
+    // This bypasses ALL Cloudinary access control issues
     const updated = await User.findByIdAndUpdate(
       req.user._id,
       {
-        resumeUrl:      result.secure_url,
-        resumePublicId: result.public_id,
+        resumeUrl:       result.secure_url,
+        resumePublicId:  result.public_id,
+        resumeData:      req.file.buffer,
+        resumeMimeType:  req.file.mimetype || 'application/pdf',
       },
       { new: true }
     ).select('-password');
@@ -286,15 +280,14 @@ exports.getResumeSignedUrl = async (req, res) => {
   }
 };
 
-// ── Make resume public + redirect ─────────────────────────────────────────
-// Ensures the asset is publicly accessible, then 302 redirects to it.
-// Called via axios (with auth header) — CORS is enabled for this route.
+// ── Serve resume from MongoDB buffer ──────────────────────────────────────
+// Reads the file bytes stored in MongoDB and streams them directly.
+// No Cloudinary dependency — works regardless of access control settings.
 exports.viewResume = async (req, res) => {
   try {
-    const jwt   = require('jsonwebtoken');
-    const { cloudinary } = require('../config/cloudinary');
+    const jwt = require('jsonwebtoken');
 
-    // 1. Verify JWT
+    // 1. Verify JWT from Authorization header or query param
     let token = req.query.token;
     if (!token && req.headers.authorization?.startsWith('Bearer ')) {
       token = req.headers.authorization.split(' ')[1];
@@ -304,27 +297,29 @@ exports.viewResume = async (req, res) => {
     try { decoded = jwt.verify(token, process.env.JWT_SECRET); }
     catch { return res.status(401).send('Invalid or expired token'); }
 
-    // 2. Find student
+    // 2. Find student — include resumeData buffer
     const studentId = req.params.id || req.query.studentId || decoded.id;
-    const student   = await User.findById(studentId).select('resumeUrl resumePublicId role');
-    if (!student || student.role !== 'student') return res.status(404).send('Student not found');
-    if (!student.resumeUrl) return res.status(404).send('No resume uploaded');
+    const student   = await User.findById(studentId)
+      .select('resumeData resumeMimeType resumeUrl role');
 
-    // 3. Ensure asset is public (in case it was uploaded before this fix)
-    if (student.resumePublicId) {
-      try {
-        const resourceType = student.resumeUrl.includes('/image/upload/') ? 'image' : 'raw';
-        await cloudinary.api.update(student.resumePublicId, {
-          resource_type: resourceType,
-          access_mode:   'public',
-        });
-      } catch (e) {
-        console.log('access_mode update:', e.message);
-      }
+    if (!student || student.role !== 'student')
+      return res.status(404).send('Student not found');
+
+    // 3. Serve from MongoDB buffer if available (new uploads)
+    if (student.resumeData && student.resumeData.length > 0) {
+      const mime = student.resumeMimeType || 'application/pdf';
+      const ext  = mime.includes('pdf') ? 'pdf'
+                 : mime.includes('word') ? 'docx' : 'pdf';
+      res.setHeader('Content-Type',        mime);
+      res.setHeader('Content-Disposition', `attachment; filename="resume.${ext}"`);
+      res.setHeader('Content-Length',      student.resumeData.length);
+      res.setHeader('Cache-Control',       'private, max-age=300');
+      return res.send(student.resumeData);
     }
 
-    // 4. Return the URL as JSON so frontend can trigger download via blob
-    res.json({ url: student.resumeUrl });
+    // 4. Fallback: return URL as JSON for old uploads without buffer
+    if (!student.resumeUrl) return res.status(404).send('No resume uploaded');
+    res.json({ url: student.resumeUrl, fallback: true });
 
   } catch (err) {
     console.error('viewResume error:', err.message);

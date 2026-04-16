@@ -19,6 +19,8 @@ const userSchema = new mongoose.Schema(
     skills:            [{ type: String }],
     resumeUrl:         { type: String },
     resumePublicId:    { type: String },
+    resumeData:        { type: Buffer },        // stored directly for reliable serving
+    resumeMimeType:    { type: String },
     profilePhoto:      { type: String },
     isPlaced:          { type: Boolean, default: false },
     placementStatus:   { type: String, enum: ['not_placed', 'placed', 'opted_out'], default: 'not_placed' },
