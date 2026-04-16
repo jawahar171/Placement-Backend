@@ -78,9 +78,18 @@ exports.uploadResume = async (req, res) => {
       resource_type: 'auto',
       public_id:     `resume_${req.user._id}_${Date.now()}`,
       format:        req.file.originalname.split('.').pop(),
-      access_mode:   'public',   // explicitly set public so URL is always accessible
       type:          'upload',
     });
+
+    // Force public access so the URL is directly accessible by browsers
+    try {
+      await cloudinary.api.update(result.public_id, {
+        resource_type: result.resource_type || 'image',
+        access_mode:   'public',
+      });
+    } catch (e) {
+      console.log('access_mode update non-critical:', e.message);
+    }
 
     const updated = await User.findByIdAndUpdate(
       req.user._id,
@@ -277,16 +286,15 @@ exports.getResumeSignedUrl = async (req, res) => {
   }
 };
 
-// ── View/download resume proxy ─────────────────────────────────────────────
-// Streams resume bytes from Cloudinary through our server.
-// New uploads use access_mode:'public' so they're always accessible.
-// Uses axios to fetch and stream — avoids any browser cross-origin issues.
+// ── Make resume public + redirect ─────────────────────────────────────────
+// Ensures the asset is publicly accessible, then 302 redirects to it.
+// Called via axios (with auth header) — CORS is enabled for this route.
 exports.viewResume = async (req, res) => {
   try {
     const jwt   = require('jsonwebtoken');
-    const axios = require('axios');
+    const { cloudinary } = require('../config/cloudinary');
 
-    // 1. Verify JWT — accept from Authorization header or query param
+    // 1. Verify JWT
     let token = req.query.token;
     if (!token && req.headers.authorization?.startsWith('Bearer ')) {
       token = req.headers.authorization.split(' ')[1];
@@ -298,24 +306,25 @@ exports.viewResume = async (req, res) => {
 
     // 2. Find student
     const studentId = req.params.id || req.query.studentId || decoded.id;
-    const student   = await User.findById(studentId).select('resumeUrl role');
+    const student   = await User.findById(studentId).select('resumeUrl resumePublicId role');
     if (!student || student.role !== 'student') return res.status(404).send('Student not found');
     if (!student.resumeUrl) return res.status(404).send('No resume uploaded');
 
-    // 3. Fetch the resume bytes from Cloudinary using server-side request
-    //    Server-side requests bypass browser CORS and access control restrictions
-    const fileRes = await axios.get(student.resumeUrl, {
-      responseType: 'stream',
-      timeout:      20000,
-      headers:      { 'User-Agent': 'Mozilla/5.0' },
-    });
+    // 3. Ensure asset is public (in case it was uploaded before this fix)
+    if (student.resumePublicId) {
+      try {
+        const resourceType = student.resumeUrl.includes('/image/upload/') ? 'image' : 'raw';
+        await cloudinary.api.update(student.resumePublicId, {
+          resource_type: resourceType,
+          access_mode:   'public',
+        });
+      } catch (e) {
+        console.log('access_mode update:', e.message);
+      }
+    }
 
-    // 4. Stream bytes to browser from our domain
-    const fmt = (student.resumeUrl.split('?')[0].split('.').pop() || 'pdf').toLowerCase();
-    res.setHeader('Content-Disposition', `attachment; filename="resume.${fmt}"`);
-    res.setHeader('Content-Type', fileRes.headers['content-type'] || 'application/pdf');
-    res.setHeader('Cache-Control', 'private, max-age=300');
-    fileRes.data.pipe(res);
+    // 4. Return the URL as JSON so frontend can trigger download via blob
+    res.json({ url: student.resumeUrl });
 
   } catch (err) {
     console.error('viewResume error:', err.message);
