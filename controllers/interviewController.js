@@ -1,5 +1,6 @@
 const Interview = require('../models/Interview');
 const Application = require('../models/Application');
+const { createVideoRoom } = require('../utils/dailyVideo');
 const { sendEmail, emailTemplates } = require('../utils/email');
 const { createNotification } = require('../utils/notifications');
 
@@ -7,8 +8,7 @@ exports.scheduleInterview = async (req, res) => {
   try {
     const {
       applicationId, scheduledAt, format, round, roundName,
-      venue, duration, interviewers, agenda,
-      meetingUrl   // ← company pastes a Google Meet / Zoom link directly
+      venue, duration, interviewers, agenda
     } = req.body;
 
     const application = await Application.findById(applicationId)
@@ -17,9 +17,19 @@ exports.scheduleInterview = async (req, res) => {
 
     if (!application) return res.status(404).json({ message: 'Application not found' });
 
-    // Validate that virtual interviews have a meeting link
-    if (format === 'virtual' && !meetingUrl) {
-      return res.status(400).json({ message: 'A meeting link is required for virtual interviews' });
+    let meetingUrl = null, meetingRoomName = null;
+    if (format === 'virtual') {
+      if (req.body.meetingLink && req.body.meetingLink.trim()) {
+        // Company provided a custom meeting link (Google Meet, Zoom, Teams etc.)
+        meetingUrl = req.body.meetingLink.trim();
+        meetingRoomName = 'custom';
+      } else {
+        // Auto-generate a Google Meet link
+        const roomName = `placement-${applicationId}-r${round}-${Date.now()}`;
+        const room = await createVideoRoom(roomName);
+        meetingUrl = room.url;
+        meetingRoomName = room.name;
+      }
     }
 
     const interview = await Interview.create({
@@ -30,8 +40,7 @@ exports.scheduleInterview = async (req, res) => {
       scheduledAt, format, round, roundName,
       duration: duration || 60,
       venue, interviewers, agenda,
-      meetingUrl: format === 'virtual' ? meetingUrl : null,
-      meetingRoomName: null
+      meetingUrl, meetingRoomName
     });
 
     application.status = 'interview_scheduled';
@@ -51,11 +60,7 @@ exports.scheduleInterview = async (req, res) => {
     );
     await sendEmail({ to: application.student.email, subject, html });
 
-    // FIX: use req.app.get('io') — req.io was never set, causing a crash
-    // that returned 500 even though the interview was already saved to DB.
-    const io = req.app.get('io');
-
-    await createNotification(io, {
+    await createNotification(req.io, {
       recipient: application.student._id,
       type: 'interview_scheduled',
       title: 'Interview Scheduled',
@@ -63,9 +68,7 @@ exports.scheduleInterview = async (req, res) => {
       link: `/student/interviews`
     });
 
-    if (io) {
-      io.to(application.student._id.toString()).emit('interview-scheduled', { interview });
-    }
+    req.io.to(application.student._id.toString()).emit('interview-scheduled', { interview });
 
     const populated = await Interview.findById(interview._id)
       .populate('student', 'name email department cgpa rollNumber skills resumeUrl')
@@ -74,7 +77,6 @@ exports.scheduleInterview = async (req, res) => {
 
     res.status(201).json(populated);
   } catch (err) {
-    console.error('scheduleInterview error:', err.message);
     res.status(500).json({ message: err.message });
   }
 };
@@ -126,6 +128,7 @@ exports.submitFeedback = async (req, res) => {
     interview.status = 'completed';
     await interview.save();
 
+    // Update application status based on result
     if (req.body.feedback?.result === 'pass') {
       await Application.findByIdAndUpdate(interview.application._id, {
         status: 'interview_completed',
@@ -174,11 +177,7 @@ exports.cancelInterview = async (req, res) => {
       html: `<h2>Interview Cancelled</h2><p>Your ${interview.roundName} for <strong>${interview.job.title}</strong> has been cancelled.</p>${req.body.reason ? `<p><strong>Reason:</strong> ${req.body.reason}</p>` : ''}<p>Please check the portal for rescheduling updates.</p>`
     });
 
-    // FIX: use req.app.get('io') instead of req.io
-    const io = req.app.get('io');
-    if (io) {
-      io.to(interview.student._id.toString()).emit('interview-cancelled', { interviewId: interview._id });
-    }
+    req.io.to(interview.student._id.toString()).emit('interview-cancelled', { interviewId: interview._id });
 
     res.json({ message: 'Interview cancelled', interview });
   } catch (err) {

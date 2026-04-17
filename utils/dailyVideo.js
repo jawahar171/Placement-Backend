@@ -1,52 +1,21 @@
-const axios = require('axios');
+/**
+ * Google Meet link generator.
+ * Generates a unique meet.google.com link in the standard format.
+ * Format: https://meet.google.com/xxx-xxxx-xxx
+ */
 
-const DAILY_BASE_URL = 'https://api.daily.co/v1';
-
-const dailyApi = axios.create({
-  baseURL: DAILY_BASE_URL,
-  headers: {
-    'Content-Type': 'application/json',
-    Authorization: `Bearer ${process.env.DAILY_API_KEY}`
-  }
-});
+function randomCode(length) {
+  const chars = 'abcdefghijkmnpqrstuvwxyz'; // no ambiguous chars
+  return Array.from({ length }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+}
 
 exports.createVideoRoom = async (roomName) => {
-  try {
-    if (!process.env.DAILY_API_KEY) {
-      // Return a mock URL for development/testing
-      return {
-        url: `https://meet.daily.co/${roomName}`,
-        name: roomName
-      };
-    }
-
-    const exp = Math.floor(Date.now() / 1000) + 7200; // 2 hour expiry
-    const response = await dailyApi.post('/rooms', {
-      name: roomName,
-      privacy: 'public',
-      properties: {
-        exp,
-        enable_recording: 'cloud',
-        enable_chat: true,
-        enable_screenshare: true,
-        start_video_off: false,
-        start_audio_off: false
-      }
-    });
-    return response.data;
-  } catch (err) {
-    console.error('Daily.co room creation failed:', err.message);
-    return {
-      url: `https://meet.daily.co/${roomName}`,
-      name: roomName
-    };
-  }
+  // Generate a unique Google Meet style link
+  const code = `${randomCode(3)}-${randomCode(4)}-${randomCode(3)}`;
+  const url  = `https://meet.google.com/${code}`;
+  return { url, name: code };
 };
 
-exports.deleteVideoRoom = async (roomName) => {
-  try {
-    await dailyApi.delete(`/rooms/${roomName}`);
-  } catch (err) {
-    console.error('Daily.co room deletion failed:', err.message);
-  }
+exports.deleteVideoRoom = async () => {
+  // No-op — Google Meet links don't need cleanup
 };
