@@ -14,7 +14,7 @@ exports.createDrive = async (req, res) => {
     const students = await User.find(query).select('_id');
 
     for (const student of students) {
-      await createNotification(req.io, {
+      await createNotification(req.app.get('io'), {
         recipient: student._id,
         type: 'drive_announced',
         title: `New Placement Drive: ${drive.title}`,
