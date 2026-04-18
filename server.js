@@ -15,6 +15,7 @@ const adminRoutes        = require('./routes/adminRoutes');
 const driveRoutes        = require('./routes/driveRoutes');
 const reportRoutes       = require('./routes/reportRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
+const chatRoutes          = require('./routes/chatRoutes');
 
 const app    = express();
 const server = http.createServer(app);
@@ -65,6 +66,7 @@ app.use('/api/drives',        driveRoutes);
 app.use('/api/reports',       reportRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/admin',         adminRoutes);
+app.use('/api/chat',          chatRoutes);
 
 // ── 404 ───────────────────────────────────────────────────────────────────
 app.use((req, res) => {
